@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    base: '/lumina-app/', // Necesario para GitHub Pages
     define: {
       // Esto hace que process.env.API_KEY funcione en el navegador
       // mapeándolo a la variable VITE_API_KEY de tu archivo .env
