@@ -1,20 +1,34 @@
-import { GoogleGenAI } from "@google/genai";
 import { DayRecord, TaskRecord } from "../types";
 
-// Initialize the Google GenAI client
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY
-// Usamos un fallback a string vacío para evitar que 'new GoogleGenAI' lance error al cargar el archivo si la key falta.
-const apiKey = process.env.API_KEY || ""; 
-const ai = new GoogleGenAI({ apiKey: apiKey });
-const modelId = 'gemini-2.5-flash';
+// API endpoint - usa Vercel en producción, localhost en desarrollo
+const API_ENDPOINT = import.meta.env.DEV
+  ? 'http://localhost:3000/api/gemini'
+  : '/api/gemini';
+
+// Función helper para llamar al backend
+async function callGeminiAPI(prompt: string): Promise<string> {
+  try {
+    const response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.text || '';
+  } catch (error) {
+    console.error('Error calling Gemini API:', error);
+    throw error;
+  }
+}
 
 export const getMotivationalMessage = async (completed: number, total: number, userName?: string): Promise<string> => {
-  // Check if API key is available to avoid errors if not configured
-  if (!apiKey) {
-    console.warn("API Key no configurada. Usando respuestas predeterminadas.");
-    return `Has dado un paso hoy${userName ? ', ' + userName : ''}. Eso ya es un éxito.`;
-  }
-
   try {
     const prompt = `
       Actúa como un terapeuta empático y compasivo.
@@ -30,12 +44,7 @@ export const getMotivationalMessage = async (completed: number, total: number, u
       5. Si completó todo, sé muy celebrativo pero calmado.
     `;
 
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-    });
-
-    return response.text || "Cada pequeño paso cuenta.";
+    return await callGeminiAPI(prompt);
   } catch (error) {
     console.error("Gemini API error:", error);
     return "Lo estás haciendo bien, paso a paso.";
@@ -43,12 +52,6 @@ export const getMotivationalMessage = async (completed: number, total: number, u
 };
 
 export const getActivitySuggestions = async (context: 'OUTDOOR' | 'INDOOR'): Promise<string[]> => {
-  if (!apiKey) {
-    return context === 'OUTDOOR' 
-      ? ["Dar un paseo corto a la manzana", "Sentarse en un banco al sol", "Ir a por un café"]
-      : ["Limpiar solo una estantería", "Regar las plantas", "Escuchar una canción que te guste"];
-  }
-
   try {
     const prompt = `
       El usuario se siente con baja energía o ánimo.
@@ -59,58 +62,49 @@ export const getActivitySuggestions = async (context: 'OUTDOOR' | 'INDOOR'): Pro
       Ejemplo: Caminar 5 minutos - Sentarse en el parque - Comprar el pan
     `;
 
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-    });
-    
-    const text = response.text || "";
+    const text = await callGeminiAPI(prompt);
+
     // Limpieza básica de la respuesta para obtener un array limpio
     return text.split('-').map(s => s.trim()).filter(s => s.length > 0);
   } catch (error) {
     console.error("Gemini API error:", error);
-     return context === 'OUTDOOR' 
+    return context === 'OUTDOOR'
       ? ["Respirar aire fresco", "Caminar suavemente", "Observar la naturaleza"]
       : ["Ordenar un cajón", "Leer 5 páginas", "Hacerte un té"];
   }
 };
 
 export const getMonthlyReport = async (
-    userName: string, 
-    moods: DayRecord[], 
-    tasks: TaskRecord[]
+  userName: string,
+  moods: DayRecord[],
+  tasks: TaskRecord[]
 ): Promise<string> => {
-    if (!apiKey) return "Este mes has demostrado resiliencia. Sigue escuchando a tu cuerpo y celebrando las pequeñas victorias.";
-
+  try {
     const moodCounts = moods.reduce((acc, curr) => {
-        if(curr.mood) acc[curr.mood] = (acc[curr.mood] || 0) + 1;
-        return acc;
+      if (curr.mood) acc[curr.mood] = (acc[curr.mood] || 0) + 1;
+      return acc;
     }, {} as Record<string, number>);
 
     const totalTasks = tasks.reduce((acc, curr) => acc + curr.completed, 0);
 
     const prompt = `
-        Analiza el mes del usuario ${userName} y dale un consejo motivacional profundo y cálido.
-        Datos:
-        - Días registrados: ${moods.length}
-        - Desglose de ánimos: ${JSON.stringify(moodCounts)}
-        - Tareas completadas (pequeños logros): ${totalTasks}
+          Analiza el mes del usuario ${userName} y dale un consejo motivacional profundo y cálido.
+          Datos:
+          - Días registrados: ${moods.length}
+          - Desglose de ánimos: ${JSON.stringify(moodCounts)}
+          - Tareas completadas (pequeños logros): ${totalTasks}
 
-        Instrucciones:
-        - No des estadísticas frías. Interpreta los datos emocionalmente.
-        - Si hay muchos días tristes/ansiosos: Valida su dolor y recuérdale que es temporal.
-        - Si hay días buenos: Celébralos.
-        - Menciona el esfuerzo de haber completado ${totalTasks} pequeñas metas (si es > 0).
-        - Máximo 3 frases. Tono muy humano y cercano.
-    `;
+          Instrucciones:
+          - No des estadísticas frías. Interpreta los datos emocionalmente.
+          - Si hay muchos días tristes/ansiosos: Valida su dolor y recuérdale que es temporal.
+          - Si hay días buenos: Celébralos.
+          - Menciona el esfuerzo de haber completado ${totalTasks} pequeñas metas (si es > 0).
+          - Máximo 3 frases. Tono muy humano y cercano.
+      `;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: modelId,
-            contents: prompt,
-        });
-        return response.text || "Tu esfuerzo por estar aquí es valioso.";
-    } catch (error) {
-        return "Tu esfuerzo por estar aquí es valioso.";
-    }
+    return await callGeminiAPI(prompt);
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    return "Tu esfuerzo por estar aquí es valioso.";
+  }
 }
