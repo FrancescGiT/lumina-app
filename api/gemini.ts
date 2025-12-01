@@ -2,23 +2,23 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Esta función serverless se ejecuta en Vercel y mantiene tu API key segura
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-    // Solo permitir POST requests
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
     // CORS headers para permitir requests desde tu frontend
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Handle preflight
+    // Handle preflight FIRST
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
+    // Solo permitir POST requests
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
     try {
-        const { prompt, action } = req.body;
+        const { prompt } = req.body;
 
         if (!prompt) {
             return res.status(400).json({ error: 'Prompt is required' });

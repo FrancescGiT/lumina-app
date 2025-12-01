@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { DayRecord, TaskRecord } from "../types";
 
 // API endpoint - usa Vercel en producción, localhost en desarrollo
